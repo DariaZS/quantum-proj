@@ -1,0 +1,8 @@
+cat > .gitignore << 'EOF'
+data/
+papers/
+.DS_Store
+.ipynb_checkpoints/
+*.pdf
+*.png
+EOF
