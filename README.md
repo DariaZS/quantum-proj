@@ -1,17 +1,19 @@
 # quantum-proj
 
-Picking a small gene panel that separates cancer from normal cells in melanoma, three ways:
+Picking a small gene panel that separates cancer from normal cells in single-cell RNA data, three ways:
 **classical** (top genes), **QUBO + brute force** (exact), and **QAOA** (Qiskit simulator).
 
 Course project for COMS 6998 Quantum Optimization (Columbia, Fall 2026). Dasha Strait.
 
 ## Data
 
-Melanoma single-cell RNA-seq, Tirosh et al. 2016, GEO [GSE72056](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE72056).
-4,645 cells, 23,686 genes, 19 patients.
+| Dataset | Notebook | Size | Status |
+|---|---|---|---|
+| Melanoma, Tirosh et al. 2016, GEO [GSE72056](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE72056) | `explore.ipynb` | 4,645 cells, 23,686 genes, 19 patients | done |
+| Head and neck cancer, Puram et al. 2017, GEO [GSE103322](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE103322) | `hnscc.ipynb` | 5,902 cells, 23,686 genes, 18 patients | in progress |
+| Breast cancer, Chung et al. 2017, GEO [GSE75688](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE75688) | | | planned |
 
-The data is not in this repo. Download `GSE72056_melanoma_single_cell_revised_v2.txt.gz`
-from GEO and put it in `data/` (don't unzip it).
+The data is not in this repo. Download the `.txt.gz` files from GEO and put them in `data/` (don't unzip them).
 
 ## Setup
 
@@ -21,9 +23,9 @@ source ~/venvs/qproj/bin/activate
 pip install scanpy qiskit scikit-learn scipy ipykernel
 ```
 
-Then open `explore.ipynb` and pick the `qproj` kernel.
+Then open a notebook and pick the `qproj` kernel.
 
-## What's in the notebook
+## What's in `explore.ipynb` (melanoma)
 
 1. Load data, split off the labels, build an AnnData object
 2. Highly variable genes + known markers, PCA / UMAP
@@ -50,9 +52,21 @@ Then open `explore.ipynb` and pick the `qproj` kernel.
 | QAOA p = 2 | 52.09 | 0.00174 | 0.0909 |
 | Exact | −1.58 | 1 | 1 |
 
+## Head and neck cancer (in progress)
+
+`hnscc.ipynb` cleans the labels (cancer / normal / unresolved), merges patient IDs written two ways (giving the 18 patients from the paper), and repeats the same pipeline. So far:
+
+- UMAP shows the same pattern as melanoma: cancer cells form one island per patient, normal cells mix
+- 16 candidates: 6 of the top 8 cancer genes are keratins (KRT5, KRT17, KRT14, ...), strongly correlated with each other (up to 0.90), so the redundancy term matters more here
+- KRT5 alone has relevance 0.96; PTPRC drops to 0.43, since most normal cells here are fibroblasts, not immune cells
+
 ## Next
 
-QAOA p = 3, smaller λ, shot-based sampling, k = 4, a dropout-noise term, and immune cell types.
+- Finish the QUBO + QAOA on the head and neck data, then breast cancer
+- QAOA p = 3 and a smaller λ (a large size penalty dominates the energy landscape)
+- A constraint-preserving (XY) mixer that keeps exactly k genes, so no penalty is needed
+- Shot-based sampling instead of exact probabilities
+- Larger panels (k ≈ 10) and a look at the shape of the data with persistent homology
 
 ## References
 
