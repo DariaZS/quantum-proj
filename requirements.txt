@@ -1,0 +1,11 @@
+# Python 3.13
+# install with:  pip install -r requirements.txt
+matplotlib==3.11.2
+numpy==2.5.4
+pandas==3.0.6
+qiskit==2.6.0
+scanpy==1.12.4
+scikit-learn==1.9.1
+scipy==1.18.1
+umap-learn==0.5.12
+ipykernel          # to run the notebooks in VS Code / Jupyter

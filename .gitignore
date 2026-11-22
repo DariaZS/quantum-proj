@@ -1,8 +1,8 @@
-cat > .gitignore << 'EOF'
 data/
 papers/
 .DS_Store
 .ipynb_checkpoints/
+__pycache__/
 *.pdf
 *.png
-EOF
+.venv/

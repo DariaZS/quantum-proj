@@ -1,145 +1,85 @@
-# quantum-proj: Notes
+# Findings: comparing three cancers
 
-**Goal:** pick a small set of genes that separates cancer from normal cells, written as a **QUBO**, then solved with brute force → CPLEX → QAOA.
+What the comparison of melanoma, head and neck, and breast cancer has shown so far.
+Methods are described in the [README](README.md); code is in `h.py` and `compare_all.ipynb`.
 
----
+## Datasets at a glance
 
-## Setup
-
-- Project folder: `~/Desktop/QuantumOptimization/quantum-proj`
-- Environment: **qproj** at `~/venvs/qproj` (outside iCloud, so it starts fast)
-  - activate: `source ~/venvs/qproj/bin/activate`
-  - installed: `scanpy qiskit ipykernel`
-- If the kernel doesn't appear in VS Code:
-  ⌘⇧P → `>Python: Select Interpreter` → **Enter interpreter path** → `/Users/dariastrait/venvs/qproj/bin/python`
-- Lesson learned: environments (venvs) don't belong on the Desktop (iCloud sync makes them slow and breaks kernels)
-
----
-
-## The data: melanoma (Tirosh et al. 2016, GEO **GSE72056**)
-
-- File: `data/GSE72056_melanoma_single_cell_revised_v2.txt.gz` (don't unzip it)
-- **4,645 cells**, **23,686 genes**, **19 patients** (all have melanoma)
-- Values are already normalized (log-scaled), not raw counts
-- Genes are **rows**, cells are **columns** in the file (we flipped it)
-- The first 3 rows are the **answer key**:
-  - `tumor`: patient ID (labels, not amounts; IDs skip numbers)
-  - `malignant`: 1 = normal, 2 = cancer, 0 = unresolved
-  - `cell_type`: 1 = T, 2 = B, 3 = Macrophage, 4 = Endothelial, 5 = CAF, 6 = NK, 0 = cancer/unknown
-
-**Counts:** T cells 2,068 · cancer/unknown 1,758 · B 515 · Macrophage 126 · Endothelial 65 · CAF 61 · NK 52
-Patients contribute very unequal numbers of cells (63 to 896).
-
----
-
-## What we learned
-
-- **0 in the table** = no RNA messages caught for that gene in that cell. Sometimes the gene is on but was missed (a **dropout**).
-- **mRNA** = a copy of a gene's recipe (letters A, U, G, C), used to build a protein. We measure **how many copies** per gene per cell.
-- More normal cells than cancer cells, because many cells were **sorted for CD45** (immune marker). Lesson: *how the data was collected shapes what you see.*
-- **UMAP:** each dot is a cell; closeness means similar genes; the axes mean nothing.
-  - Normal cells from different patients **mix**
-  - Cancer cells form **islands by patient** (each person's cancer is unique)
-- **"Highly variable" ≠ "useful for my question."** PTPRC separates normal from cancer cells 25× (5.23 vs 0.21), yet ranked **17,374th** in variability. The method never looks at labels.
-- Without labels, scientists find cancer cells with clues like **broken chromosomes (inferCNV)**, **patient-specific clusters**, and **marker genes**.
-
----
-
-## Code so far (`explore.ipynb`)
-
-```python
-import pandas as pd, numpy as np
-import anndata as ad, scanpy as sc
-
-# 1. Load and split the answer key from the genes
-df = pd.read_csv("data/GSE72056_melanoma_single_cell_revised_v2.txt.gz", sep="\t", index_col=0)
-labels = df.iloc[:3]
-genes = df.iloc[3:]
-key = labels.T
-key.columns = ["tumor", "malignant", "cell_type"]
-
-# 2. AnnData (cells × genes)
-adata = ad.AnnData(X=genes.T.values.astype("float32"))
-adata.obs_names = genes.columns
-adata.var_names = genes.index
-adata.var_names_make_unique()
-for col in ["tumor", "malignant", "cell_type"]:
-    adata.obs[col] = key[col].values
-
-# 3. Highly variable genes + known markers
-sc.pp.highly_variable_genes(adata, n_top_genes=2000)
-markers = ["PTPRC", "CD3E", "CD19", "CD14", "NKG7", "PECAM1", "COL1A1", "MLANA", "PMEL"]
-markers = [g for g in markers if g in adata.var_names]
-adata.var.loc[markers, "highly_variable"] = True        # total: 2,007
-
-# 4. PCA + UMAP
-adata_hv = adata[:, adata.var["highly_variable"]].copy()
-sc.pp.pca(adata_hv, n_comps=50)
-sc.pp.neighbors(adata_hv)
-sc.tl.umap(adata_hv)
-adata_hv.obs["malignant"] = adata_hv.obs["malignant"].astype(int).astype(str)
-adata_hv.obs["tumor"] = adata_hv.obs["tumor"].astype(int).astype(str)
-
-# 5. Train/test split (never grade on the cells you studied)
-from sklearn.model_selection import train_test_split
-train_idx, test_idx = train_test_split(adata_hv.obs_names, test_size=0.5,
-                                       random_state=42, stratify=adata_hv.obs["cell_type"])
-# 2,322 train, 2,323 test
-
-# 6. Candidate genes from the TRAINING half only (unresolved cells dropped)
-train = adata_hv[train_idx].copy()
-train = train[train.obs["malignant"] != "0"].copy()
-sc.tl.rank_genes_groups(train, groupby="malignant", method="wilcoxon")
-top_cancer = sc.get.rank_genes_groups_df(train, group="2").head(8)
-top_normal = sc.get.rank_genes_groups_df(train, group="1").head(8)
-candidates = list(top_cancer["names"]) + list(top_normal["names"])
-
-# 7. Redundancy (pair penalty) and relevance (reward)
-expr = train[:, candidates].X
-corr = np.corrcoef(expr.T)                       # 16 × 16
-y = (train.obs["malignant"] == "2").astype(int).values
-r = np.array([abs(np.corrcoef(expr[:, i], y)[0, 1]) for i in range(len(candidates))])
-```
-
----
-
-## The 16 candidate genes (= 16 qubits)
-
-| Cancer-high | r | Normal-high | r |
+| | Melanoma | Head and neck | Breast |
 |---|---|---|---|
-| APOD | 0.82 | PTPRC | 0.76 |
-| SPARC | 0.78 | CD74 | 0.63 |
-| PMEL | 0.78 | CD3E | 0.50 |
-| MLANA | 0.72 | CABP4 | 0.38 |
-| TIMP1 | 0.67 | UGDH-AS1 | 0.37 |
-| CALD1 | 0.66 | LYZ | 0.36 |
-| CCND1 | 0.65 | MAB21L3 | 0.34 |
-| CTSL1 | 0.64 | CCL22 | 0.32 |
+| Source | Tirosh 2016 (GSE72056) | Puram 2017 (GSE103322) | Chung 2017 (GSE75688) |
+| Cells / patients | 4,645 / 19 | 5,902 / 18 | 515 / 11 |
+| Unresolved cells | 132 | 324 | 0 |
+| Normal cells are mostly | immune (CD45-sorted) | fibroblasts and T cells | B cells, T cells, myeloid |
+| Best single gene (relevance) | APOD, 0.82 | KRT5, 0.96 | KRT18, 0.78 |
 
-- PMEL ↔ MLANA correlation = **0.8**, so they're redundant witnesses
-- The correlation heatmap shows **two warm blocks** (each team) and **two blue blocks** (cancer vs. normal)
-- CD3E is only 0.50 because it marks **T cells only**, while PTPRC marks **all** immune cells
+## 1. The same cell structure in all three cancers
 
----
+- In UMAP, cancer cells form **one island per patient**, while normal cells from different patients **mix**.
+  Each patient's tumor is unique; normal cell types are shared.
+- Unresolved cells sit at the borders between groups (melanoma, head and neck).
+- Isomap (breast) shows a nearly linear split between cancer and normal cells, and pulls the patient islands into one
+  cancer region, except one patient (BC05) whose tumor is far from all others.
 
-## The QUBO
+## 2. Top genes reflect each tumor's tissue of origin
 
-$$\min_x \; -\sum_i r_i x_i \;+\; \alpha \sum_{i<j} |R_{ij}|\, x_i x_j \;+\; \lambda\Big(\sum_i x_i - k\Big)^2$$
+| | Cancer-side genes | Normal-side genes |
+|---|---|---|
+| Melanoma | S100B, PRAME, PMEL, MLANA (pigment cell lineage) | PTPRC, LAPTM5, CXCR4 |
+| Head and neck | KRT5, KRT14, KRT17 (squamous keratins) | PTPRC, LYZ, CCL22 |
+| Breast | KRT8, KRT18, KRT19, EPCAM, ERBB2 (glandular epithelium) | RGS1, PTPRC, CD53 |
 
-- **−relevance:** we want it big, so we negate it
-- **+redundancy:** a cost for picking similar pairs
-- **+λ(Σx − k)²:** a penalty for not picking exactly k genes
+PTPRC, the pan-immune marker, is a top normal-side gene in all three datasets.
 
----
+## 3. How candidates are chosen matters more than how the final pair is picked
 
-## Next time
+Melanoma, 80/20 split, 10 repeated splits:
 
-1. Choose **k** (how many genes, e.g. 4) and the weights **α**, **λ**
-2. Build the **Q matrix** (expand (Σx − k)² like in Homework 1; mind the factor of 2 off the diagonal)
-3. Solve: **brute force** (2¹⁶ = 65,536 options) → **CPLEX** → **QAOA**
-4. **Test:** train a simple classifier on the chosen genes (training half), score it on the **test half**
-5. Compare the QUBO's choice with simply taking the top-k genes by relevance
+| Candidate pool | Best pair | Balanced accuracy |
+|---|---|---|
+| Hand-picked markers + highly variable genes | APOD, PTPRC | 0.931 ± 0.008 |
+| Wilcoxon on all genes / lasso / stability selection | S100B, TMSB4X | 0.976 ± 0.007 |
 
----
+- Filtering to highly variable genes is label-blind and removed useful genes (PTPRC ranks 17,374th in variability
+  in melanoma). Hand-picked markers only partly compensated.
+- Without hand-picking, the selection recovered clinically used melanoma markers (S100B, PRAME).
+- In breast, the automatic pool shared only 3 of 16 candidates with the hand-picked pool, and its best pair
+  (TFAP2C, PTPRF, 0.924) was also chosen independently by the lasso from all genes.
 
-*Note: the Alignment method belongs to a professor, so ask them before using it in this project.*
+## 4. QUBO vs classical selection
+
+First runs (hand-picked pool, 50/50 split, α = 1, λ = 2):
+
+| | QUBO | Top 2 by relevance | Outcome |
+|---|---|---|---|
+| Melanoma | APOD, PTPRC: 0.931 | APOD, SPARC: 0.910 | QUBO better |
+| Head and neck | KRT5, PTPRC: 0.989 | KRT5, KRT17: 0.995 | tie (one gene already gives 0.989) |
+| Breast | KRT18, RGS1: 0.902 | KRT18, EPCAM: 0.905 | tie |
+
+- **Redundancy should count only positive correlation.** Penalizing |correlation| treated a cancer gene and an
+  immune gene as redundant, although together they separate the groups best.
+- **Correlation is not the same as redundant information.** In breast, two correlated cancer genes outperformed a
+  cancer + immune pair (0.924 vs 0.895); the QUBO switches between them at α ≈ 0.10–0.15.
+- **The best redundancy weight depends on the dataset** (melanoma needs it, breast does not), so α is now chosen by
+  cross-validation within the training cells. With well-chosen candidates, cross-validation selected α = 0 and all
+  methods agreed.
+- Summary: the QUBO's redundancy term helps most when the candidate pool contains redundant genes.
+
+## 5. QAOA
+
+- The cost Hamiltonian (136 Pauli terms for 16 genes) reproduces the brute-force optimum in every dataset.
+- **A large size penalty dominates the energy landscape.** With λ = 2, melanoma and head and neck had identical
+  optimal p = 1 angles (β = 0.327, γ = 0.167) and nearly identical probabilities: QAOA was mostly learning the
+  size constraint rather than the gene choice. The smallest provably safe λ is about half as large (0.85–0.96).
+- **Average energy can hide progress.** From p = 1 to p = 2, P(optimal panel) rose about 11× in melanoma while the
+  average energy changed little.
+- **Angle optimization can get stuck.** In breast, p = 2 reached a much deeper minimum (average energy 0.59,
+  P(optimal) 0.004, 46% of shots with exactly 2 genes) than in the other datasets, suggesting earlier runs stopped in
+  local minima. Multi-start optimization with INTERP initialization is now used.
+
+## Open questions
+
+- How much do the smaller λ and the XY mixer (which keeps exactly k genes) improve QAOA?
+- Do larger panels (k = 4, 10) generalize better across splits and datasets?
+- Can a different redundancy measure (e.g. mutual information) make the QUBO track accuracy more closely?
+- Does the method extend to harder tasks, such as separating immune cell types?

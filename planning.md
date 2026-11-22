@@ -47,6 +47,7 @@ Weights: **α** (redundancy), **β** (noise), **λ** (size). λ must be large en
 ## Data
 
 - **Melanoma scRNA-seq**, Tirosh et al. 2016, GEO **GSE72056** (free, NIH)
+- Also: head and neck (Puram et al. 2017, GSE103322) and breast (Chung et al. 2017, GSE75688)
 - 4,645 cells · 23,686 genes · 19 patients
 - Answer key: tumor (patient), malignant (1 = normal, 2 = cancer, 0 = unresolved), cell type (T, B, macrophage, endothelial, CAF, NK)
 - Values already log-normalized
@@ -100,23 +101,38 @@ Weights: **α** (redundancy), **β** (noise), **λ** (size). λ must be large en
 
 ## Progress
 
-- [x] Environment `qproj` (`~/venvs/qproj`): scanpy, qiskit
-- [x] Data loaded, answer key separated, AnnData built
-- [x] Highly variable genes + known markers (2,007 genes), UMAP
-- [x] Train/test split (2,322 / 2,323)
-- [x] 16 candidate genes for task A; relevance **r** and redundancy **R** computed
-- [ ] Noise term **d**
-- [ ] Build Q, choose k, α, β, λ
-- [ ] Brute force → CPLEX → QAOA
-- [ ] Evaluate on test half, compare with baselines
+- [x] Environment: scanpy, qiskit
+- [x] Three datasets loaded with the same label format (melanoma, head and neck, breast)
+- [x] Train/test split; 16 candidate genes; relevance and redundancy
+- [x] Build Q, brute force, evaluate on the test half, compare with top-k
+- [x] Positive-only redundancy; 10-split fairness check
+- [x] Cost Hamiltonian checked against brute force; QAOA p = 1 (grid) and p = 2 (COBYLA)
+- [x] Candidate pools without hand-picking (Wilcoxon on all genes, lasso, stability selection)
+- [x] `h.py`: safe automatic λ, α by cross-validation, QAOA simulator with INTERP, multi-start, XY mixer
+- [ ] `compare_all.ipynb`: all three datasets side by side (melanoma done)
+- [ ] QAOA with the new λ and the XY mixer
+- [ ] Noise term d (dropouts)
+- [ ] Larger panels (k = 4, 10)
 - [ ] Task B (immune types)
-- [ ] Write-up
+- [ ] Write-up and presentation
 
 ---
 
 ## Later / side quests
 
 - **Anomaly detection** (Stolz et al. 2020, geometric anomaly detection): are the "unresolved" (malignant = 0) cells geometric anomalies sitting between groups? Start with ~1,000 cells, ~10 PCA dimensions.
+  - **Observation (PCA / Isomap / UMAP comparison):** the uncertain cells mostly live **at borders and in gaps**.
+    - **Normal, unknown type** (malignant = 1, cell type = 0; **416 cells**): in UMAP they form a **bridge between B cells and macrophages** and sit around the edges of the T-cell island; in PCA they're scattered in the middle.
+    - **Unresolved** (malignant = 0; **132 cells**): in UMAP some sit **inside cancer islands** and some **inside the T-cell island**; in PCA a line of them runs along the **T-cell / cancer border**. (Possibly doublets: two cells captured together.)
+    - The answer key isn't perfectly tidy: 28 cells labeled "T" are also marked unresolved or cancer.
+  - **Testable question:** do geometric anomaly scores rank the unknown-type and unresolved cells higher than well-labeled cells?
+  - Label code used:
+    ```python
+    mal = adata_hv.obs["malignant"].astype(int)
+    ct = adata_hv.obs["cell_type"].astype(int).map(names)
+    adata_hv.obs["label"] = np.where(mal == 2, "cancer", np.where(mal == 0, "unresolved", ct))
+    ```
+- **Embedding comparison (done once, k = 5 for Isomap):** PCA keeps global distances but squashes T and B together; Isomap sits in between; UMAP gives every rare type its own island but exaggerates gaps (distances between islands mean little). UMAP answers "which groups exist," Isomap "how they connect."
 - **Compare noise-aware dimensionality reduction** on the melanoma data with its answer key: PCA vs. **scVI**, **GLM-PCA**, **ZINB-WaVE**, **PHATE**. Look for where they all fail; that gap is where a new method could live.
 - **Long-term idea:** a dimensionality reduction that models noise directly, plus a way to judge which embedding to trust.
 
