@@ -58,7 +58,9 @@ All selection steps use the training cells only (80/20 split).
 
 - The choice of candidate pool matters more than the final selection method.
 - The QUBO's redundancy term improves on top-2 selection when the candidate pool contains redundant genes.
-- A large size penalty dominates the QAOA energy landscape; the smaller, provably safe penalty addresses this.
+- QAOA: after improving angle optimization (energy rescaling, multi-start, INTERP) and the candidate pool, the
+  probability of sampling the optimal panel rose about 20×; reducing the size penalty had little effect. The XY mixer gave a further ~3.5× gain
+  (P(optimal) = 0.014 at p = 2, with every shot a valid 2-gene panel).
 
 Head and neck and breast are in progress. See `NOTES.md` for details.
 

@@ -68,18 +68,30 @@ First runs (hand-picked pool, 50/50 split, α = 1, λ = 2):
 ## 5. QAOA
 
 - The cost Hamiltonian (136 Pauli terms for 16 genes) reproduces the brute-force optimum in every dataset.
-- **A large size penalty dominates the energy landscape.** With λ = 2, melanoma and head and neck had identical
-  optimal p = 1 angles (β = 0.327, γ = 0.167) and nearly identical probabilities: QAOA was mostly learning the
-  size constraint rather than the gene choice. The smallest provably safe λ is about half as large (0.85–0.96).
+- **A large size penalty compressed the landscape in early runs.** With λ = 2 and a fixed angle grid (γ ≤ 0.5),
+  melanoma and head and neck had identical optimal p = 1 angles (β = 0.327, γ = 0.167) and nearly identical
+  probabilities.
 - **Average energy can hide progress.** From p = 1 to p = 2, P(optimal panel) rose about 11× in melanoma while the
   average energy changed little.
-- **Angle optimization can get stuck.** In breast, p = 2 reached a much deeper minimum (average energy 0.59,
-  P(optimal) 0.004, 46% of shots with exactly 2 genes) than in the other datasets, suggesting earlier runs stopped in
-  local minima. Multi-start optimization with INTERP initialization is now used.
+- **Angle optimization matters most.** In breast, p = 2 reached a much deeper minimum than in the other datasets,
+  suggesting earlier runs stopped in local minima. With energy rescaling, multi-start, and INTERP initialization
+  (and the new candidate pool), P(optimal panel) at p = 1 rose about 20× in melanoma (0.00016 → 0.0030).
+  The two changes are not yet separated.
+- **The size of λ had little effect once angles were well optimized.** Same candidates, X mixer:
+  λ = 2 gave P(optimal) = 0.0033 (p = 1) and 0.0040 (p = 2); the smallest safe λ (0.96) gave 0.0030 and 0.0037.
+- **The XY mixer (Hamming-weight preserving) is clearly better.** Melanoma, stable candidate pool:
+
+| Circuit | P(optimal panel) | Shots with 2 genes | Shots for 99% |
+|---|---|---|---|
+| Random guess | 0.00002 | 0.2% | 301,803 |
+| X mixer, p = 1 / 2 / 3 | 0.0030 / 0.0037 / 0.0041 | 35% / 42% / 45% | 1,550 / 1,250 / 1,132 |
+| XY mixer, p = 1 / 2 | 0.0107 / 0.0142 | 100% | 427 / 323 |
+
+  Extra layers help the X mixer only slowly; XY at p = 1 already outperforms X at p = 3.
 
 ## Open questions
 
-- How much do the smaller λ and the XY mixer (which keeps exactly k genes) improve QAOA?
+- Does the XY mixer's advantage hold for head and neck, breast, and larger panels?
 - Do larger panels (k = 4, 10) generalize better across splits and datasets?
 - Can a different redundancy measure (e.g. mutual information) make the QUBO track accuracy more closely?
 - Does the method extend to harder tasks, such as separating immune cell types?
