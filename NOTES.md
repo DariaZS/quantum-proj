@@ -1,97 +1,81 @@
-# Findings: comparing three cancers
+# Findings
 
-What the comparison of melanoma, head and neck, and breast cancer has shown so far.
-Methods are described in the [README](README.md); code is in `h.py` and `compare_all.ipynb`.
+Comparison of melanoma, head and neck, and breast cancer. Methods: see [README](README.md).
+All numbers: 80/20 split, class-balanced logistic regression, balanced accuracy over 10 random splits.
 
-## Datasets at a glance
+## Datasets
 
 | | Melanoma | Head and neck | Breast |
 |---|---|---|---|
 | Source | Tirosh 2016 (GSE72056) | Puram 2017 (GSE103322) | Chung 2017 (GSE75688) |
 | Cells / patients | 4,645 / 19 | 5,902 / 18 | 515 / 11 |
 | Unresolved cells | 132 | 324 | 0 |
-| Normal cells are mostly | immune (CD45-sorted) | fibroblasts and T cells | B cells, T cells, myeloid |
-| Best single gene (relevance) | APOD, 0.82 | KRT5, 0.96 | KRT18, 0.78 |
+| Normal cells mostly | immune (CD45-sorted) | fibroblasts, T cells | B cells, T cells, myeloid |
 
-## 1. The same cell structure in all three cancers
+## 1. Cell structure
 
-- In UMAP, cancer cells form **one island per patient**, while normal cells from different patients **mix**.
-  Each patient's tumor is unique; normal cell types are shared.
-- Unresolved cells sit at the borders between groups (melanoma, head and neck).
-- Isomap (breast) shows a nearly linear split between cancer and normal cells, and pulls the patient islands into one
-  cancer region, except one patient (BC05) whose tumor is far from all others.
+- UMAP, all three: cancer cells form one cluster per patient; normal cells from different patients mix.
+- Unresolved cells lie at cluster borders (melanoma, head and neck).
+- Isomap (breast): a near-linear cancer/normal split; one patient (BC05) far from all others.
 
-## 2. Top genes reflect each tumor's tissue of origin
+## 2. Top genes reflect tissue of origin
 
-| | Cancer-side genes | Normal-side genes |
+| | Cancer side | Normal side |
 |---|---|---|
-| Melanoma | S100B, PRAME, PMEL, MLANA (pigment cell lineage) | PTPRC, LAPTM5, CXCR4 |
-| Head and neck | KRT5, KRT14, KRT17 (squamous keratins) | PTPRC, LYZ, CCL22 |
-| Breast | KRT8, KRT18, KRT19, EPCAM, ERBB2 (glandular epithelium) | RGS1, PTPRC, CD53 |
+| Melanoma | S100B, PRAME, SOX10, PMEL, MLANA | PTPRC, LAPTM5, TMSB4X |
+| Head and neck | KRT5, KRT17, PERP, DSP, SFN | VIM, TMSB4X, B2M |
+| Breast | PTPRF, TFAP2C, ERBB3, EPCAM, KRT8 | RGS1, CD53, PTPRC |
 
-PTPRC, the pan-immune marker, is a top normal-side gene in all three datasets.
+Without hand-picking, the selection recovers clinical melanoma markers (S100B, PRAME).
 
-## 3. How candidates are chosen matters more than how the final pair is picked
+## 3. Candidate pool matters most
 
-Melanoma, 80/20 split, 10 repeated splits:
-
-| Candidate pool | Best pair | Balanced accuracy |
+| | Hand-picked + HVG | Automatic (Wilcoxon / lasso / stability) |
 |---|---|---|
-| Hand-picked markers + highly variable genes | APOD, PTPRC | 0.931 ± 0.008 |
-| Wilcoxon on all genes / lasso / stability selection | S100B, TMSB4X | 0.976 ± 0.007 |
+| Melanoma | APOD, PTPRC: 0.951 | S100B, TMSB4X: 0.982 |
+| Head and neck | KRT5, KRT17: 0.993 | KRT5, KRT17: 0.993 |
+| Breast | EPCAM, KRT8: 0.898 | PTPRF, TFAP2C: 0.919 |
 
-- Filtering to highly variable genes is label-blind and removed useful genes (PTPRC ranks 17,374th in variability
-  in melanoma). Hand-picked markers only partly compensated.
-- Without hand-picking, the selection recovered clinically used melanoma markers (S100B, PRAME).
-- In breast, the automatic pool shared only 3 of 16 candidates with the hand-picked pool, and its best pair
-  (TFAP2C, PTPRF, 0.924) was also chosen independently by the lasso from all genes.
+- The highly-variable-gene filter is label-blind and can exclude useful genes (PTPRC ranks 17,374th in melanoma).
+- Wilcoxon and stability selection give nearly identical pools; the lasso overlaps partly.
+- Head and neck is near ceiling: KRT5 alone separates the classes almost perfectly.
 
 ## 4. QUBO vs classical selection
 
-First runs (hand-picked pool, 50/50 split, α = 1, λ = 2):
+- With automatic pools, cross-validation sets the redundancy weight α to 0 in all three datasets, so the QUBO
+  equals top-2 selection. The lasso (choosing from all genes) matches the best automatic pair in melanoma and
+  breast, and is within 0.002 in head and neck.
+- The QUBO improves on top-2 only when candidates are redundant: melanoma, hand-picked pool, 0.951 vs 0.927.
+- Redundancy should use positive correlation only; |correlation| penalizes complementary cancer/immune pairs.
+- Correlated genes can still add information (breast: two cancer genes beat cancer + immune), so α is chosen
+  per dataset by cross-validation within the training set.
+- The class-balanced classifier changed breast's α from 0.05 to 0; an earlier QUBO advantage there
+  (0.913 vs 0.887) did not hold.
 
-| | QUBO | Top 2 by relevance | Outcome |
+## 5. QAOA (16 qubits, statevector simulation, stability-selection pool)
+
+P(optimal panel):
+
+| | X mixer, p = 1 / 2 / 3 | XY mixer, p = 1 / 2 | XY start (1/120) |
 |---|---|---|---|
-| Melanoma | APOD, PTPRC: 0.931 | APOD, SPARC: 0.910 | QUBO better |
-| Head and neck | KRT5, PTPRC: 0.989 | KRT5, KRT17: 0.995 | tie (one gene already gives 0.989) |
-| Breast | KRT18, RGS1: 0.902 | KRT18, EPCAM: 0.905 | tie |
+| Melanoma | 0.0030 / 0.0037 / 0.0041 | 0.0107 / 0.0142 | 0.0083 |
+| Head and neck | 0.0032 / 0.0040 / 0.0047 | 0.0025 / 0.0033 | 0.0083 |
+| Breast | 0.0029 / 0.0035 / 0.0038 | 0.0096 / 0.0112 | 0.0083 |
 
-- **Redundancy should count only positive correlation.** Penalizing |correlation| treated a cancer gene and an
-  immune gene as redundant, although together they separate the groups best.
-- **Correlation is not the same as redundant information.** In breast, two correlated cancer genes outperformed a
-  cancer + immune pair (0.924 vs 0.895); the QUBO switches between them at α ≈ 0.10–0.15.
-- **The best redundancy weight depends on the dataset** (melanoma needs it, breast does not), so α is now chosen by
-  cross-validation within the training cells. With well-chosen candidates, cross-validation selected α = 0 and all
-  methods agreed.
-- Summary: the QUBO's redundancy term helps most when the candidate pool contains redundant genes.
+Random guess over all 65,536 bit strings: 0.000015.
 
-## 5. QAOA
-
-- The cost Hamiltonian (136 Pauli terms for 16 genes) reproduces the brute-force optimum in every dataset.
-- **A large size penalty compressed the landscape in early runs.** With λ = 2 and a fixed angle grid (γ ≤ 0.5),
-  melanoma and head and neck had identical optimal p = 1 angles (β = 0.327, γ = 0.167) and nearly identical
-  probabilities.
-- **Average energy can hide progress.** From p = 1 to p = 2, P(optimal panel) rose about 11× in melanoma while the
-  average energy changed little.
-- **Angle optimization matters most.** In breast, p = 2 reached a much deeper minimum than in the other datasets,
-  suggesting earlier runs stopped in local minima. With energy rescaling, multi-start, and INTERP initialization
-  (and the new candidate pool), P(optimal panel) at p = 1 rose about 20× in melanoma (0.00016 → 0.0030).
-  The two changes are not yet separated.
-- **The size of λ had little effect once angles were well optimized.** Same candidates, X mixer:
-  λ = 2 gave P(optimal) = 0.0033 (p = 1) and 0.0040 (p = 2); the smallest safe λ (0.96) gave 0.0030 and 0.0037.
-- **The XY mixer (Hamming-weight preserving) is clearly better.** Melanoma, stable candidate pool:
-
-| Circuit | P(optimal panel) | Shots with 2 genes | Shots for 99% |
-|---|---|---|---|
-| Random guess | 0.00002 | 0.2% | 301,803 |
-| X mixer, p = 1 / 2 / 3 | 0.0030 / 0.0037 / 0.0041 | 35% / 42% / 45% | 1,550 / 1,250 / 1,132 |
-| XY mixer, p = 1 / 2 | 0.0107 / 0.0142 | 100% | 427 / 323 |
-
-  Extra layers help the X mixer only slowly; XY at p = 1 already outperforms X at p = 3.
+- The cost Hamiltonian reproduces the brute-force optimum in every dataset.
+- **The XY mixer's advantage comes mostly from its starting state** (uniform over the 120 valid panels).
+  Its layers change P(optimal) by 1.7× (melanoma), 1.35× (breast), and 0.4× (head and neck).
+- **The optimizer targets average energy, not P(optimal).** With many near-tied panels, lower average energy
+  can coexist with a lower chance of the exact optimum.
+- **Angle optimization dominated early results.** Energy rescaling, multi-start, and INTERP initialization raised
+  P(optimal) about 20× over the first runs (together with the new candidate pool; effects not separated).
+- **The size penalty λ had little effect** once angles were well optimized (melanoma: λ = 2 gave 0.0033 / 0.0040
+  at p = 1 / 2, the smallest safe λ gave 0.0030 / 0.0037).
 
 ## Open questions
 
-- Does the XY mixer's advantage hold for head and neck, breast, and larger panels?
-- Do larger panels (k = 4, 10) generalize better across splits and datasets?
-- Can a different redundancy measure (e.g. mutual information) make the QUBO track accuracy more closely?
+- Does a CVaR objective (optimizing the best shots rather than the mean) concentrate QAOA on the optimum?
+- Do larger panels (k = 4, 10) generalize better, and is QAOA more competitive there?
 - Does the method extend to harder tasks, such as separating immune cell types?

@@ -425,12 +425,14 @@ def simulated_annealing(Q, const, cands, k, n_steps=20000, n_restarts=10,
 # ---------------------------------------------------------------------------
 
 def _fit_score(Xtr, ytr, Xte, yte):
-    model = LogisticRegression(max_iter=1000).fit(Xtr, ytr)
+    # class_weight="balanced": both classes count equally during training,
+    # matching the balanced-accuracy score used for grading
+    model = LogisticRegression(max_iter=1000, class_weight="balanced").fit(Xtr, ytr)
     return balanced_accuracy_score(yte, model.predict(Xte))
 
 
 def evaluate(adata, panel, train, test):
-    """Balanced accuracy of logistic regression on the panel, trained on train, graded on test."""
+    """Balanced accuracy of class-balanced logistic regression on the panel, trained on train, graded on test."""
     return _fit_score(expr(adata, train, panel), labels(adata, train),
                       expr(adata, test, panel), labels(adata, test))
 

@@ -46,23 +46,24 @@ All selection steps use the training cells only (80/20 split).
    - QUBO: relevance reward, redundancy penalty (positive correlation), and a size penalty, solved exactly.
      The redundancy weight is set by cross-validation; the size penalty is the smallest value that guarantees 2 genes.
    - QAOA: the same QUBO, statevector-simulated, with the standard X mixer and a Hamming-weight-preserving XY mixer.
-3. **Evaluation:** logistic regression, balanced accuracy on the test set and over 10 random splits.
+3. **Evaluation:** class-balanced logistic regression, balanced accuracy on the test set and over 10 random splits.
 
-## Results (melanoma)
+## Results
 
-| Candidate pool | Method | Panel | Balanced accuracy |
-|---|---|---|---|
-| Markers + HVG | Top 2 | APOD, SPARC | 0.906 ± 0.011 |
-| Markers + HVG | QUBO | APOD, PTPRC | 0.931 ± 0.008 |
-| Wilcoxon / lasso / stability | Top 2, QUBO, lasso | S100B, TMSB4X | 0.976 ± 0.007 |
+Balanced accuracy, 10 random 80/20 splits. Best panel per candidate pool:
 
-- The choice of candidate pool matters more than the final selection method.
-- The QUBO's redundancy term improves on top-2 selection when the candidate pool contains redundant genes.
-- QAOA: after improving angle optimization (energy rescaling, multi-start, INTERP) and the candidate pool, the
-  probability of sampling the optimal panel rose about 20×; reducing the size penalty had little effect. The XY mixer gave a further ~3.5× gain
-  (P(optimal) = 0.014 at p = 2, with every shot a valid 2-gene panel).
+| | Hand-picked pool | Automatic pools |
+|---|---|---|
+| Melanoma | APOD, PTPRC: 0.951 (top 2: 0.927) | S100B, TMSB4X: 0.982 |
+| Head and neck | KRT5, KRT17: 0.993 | KRT5, KRT17: 0.993 |
+| Breast | EPCAM, KRT8: 0.898 | PTPRF, TFAP2C: 0.919 |
 
-Head and neck and breast are in progress. See `NOTES.md` for details.
+- Candidate pool choice matters more than the selection method; without hand-picking, all methods converge.
+- The QUBO beats top-2 selection only when the pool contains redundant genes (melanoma, hand-picked pool).
+- QAOA rarely concentrates on the exact optimum: the XY mixer starts at P(optimal) = 1/120 and its layers change
+  this by 0.4× to 1.7× across datasets, likely because the optimizer minimizes average energy, not P(optimal).
+
+See `NOTES.md` for details.
 
 ## References
 
